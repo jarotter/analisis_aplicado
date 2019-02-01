@@ -12,77 +12,24 @@ jupyter:
     name: python3
 ---
 
+```python
+import numpy as np
+import numdifftools as nd
+
+from scipy.optimize import rosen
+```
+
 # Laboratorio 1 - métodos de descenso
 
-```python
-# Parche para sibling imports
-sys.path.append('..')
-```
+Método general de búsqueda de línea para descenso por tres direcciones: Newton, máximo descenso y coordenada de máximo descenso.
 
-```python
-# Imports genéricos
-import numpy as np
-import sys
-from utils import gradiente
-```
+En este notebook suponemos
 
-```python
-def encontrar_alfa(f, x, grad, p, c1=0.1, max_inner_iter=10):
-    """Encuentra por búsqueda binaria la tasa de aprendizaje en una iteración.
-    
-    Entradas:
-    ---------
-    f : función
-        El objetivo que se está optimizando.
-    x : ndarray
-        Punto actual.
-    grad : ndarray
-        Gradiente de f en x.
-    p : ndarray
-        Dirección de descenso.
-    c1 : double
-        Constante de wolfe.
-    max_iner_iter : int
-        Cota para el número de iteraciones o equivalentemente, 
-        cota inferior para alfa de la forma 2^{-max_inner_iter}<=alfa
-        
-    Regresa:
-    --------
-    alpha : double
-        Una buena tasa de aprendizaje.
-    """
-    
-    n_iter = 0
-    alpha = 1
-    
-    while f(x+alpha*p) > f(x)+alpha*c1*np.dot(grad,p) & n_iter < max_inner_iter:
-        alfa /= 2
-        n_iter += 1
-        
-    return alpha
-```
+$$
+\mathcal{C}^2 \ni f: \mathbb{R}^n \to \mathbb{R}
+$$
 
-```python
-def descoor(grad):
-    """ Elige p por la coordenada de mayor descenso.
-    """
-    k = np.argmax(grad)
-    if grad > 0:
-        return -np.identity(n)[k]
-    else:
-        return np.identity(n)[k]      
-```
-
-```python
-def max_desc(f, x):
-    """ Elige p de máximo descenso.
-    """
-    return -gradiente(f,x)
-```
-
-```python
-def
-```
+## Método general
 
 ```python
 def busqueda_linea(f, x, tol=1e-5, max_iter=300, method='newton', **kwargs):
@@ -114,34 +61,132 @@ def busqueda_linea(f, x, tol=1e-5, max_iter=300, method='newton', **kwargs):
     W = np.copy(x)
     
     n_iter = 0
-    grad = gradiente(f,x)
-    while np.linalg.norm(grad) > tol and n_iter < max_iter:
+    grad = nd.Gradient(f)
+    while (np.linalg.norm(grad(x)) > tol) and (n_iter < max_iter):
         
         if method == 'descoor':
-            p = descoor(grad)
+            p = descoor(grad(x))
         elif method == 'max':
-            p = max_descent(f,x):
+            p = -grad(x)
         elif method == 'newton':
             p = newton_dir(f,x)
         else:
             raise ValueError('Método inválido')
             
-        alfa = encontrar_alfa(f,x,grad,p,**kwargs)
+        alfa = encontrar_alfa(f,x,grad(x),p,**kwargs)
         x = x + alfa*p
-        grad = gradiente(f,x)
         
         W = np.vstack([W,x])
+        n_iter +=1
         
-    return (x, n_iter, W)
+    return ({'x*':x, 'n_iter':n_iter, 'W':W})
     
 ```
 
-```python
-def inner(x=1000):
-    return f'inner function with x={x} and y={y}'
+## Encontrar $\alpha$
 
-def outer(y=10, **kwargs):
-    print(f'outer function with outerx={y}')
-    print(inner(**kwargs))
+```python
+def encontrar_alfa(f, x, grad, p, c1=0.1, max_inner_iter=10):
+    """Encuentra por búsqueda binaria la tasa de aprendizaje en una iteración.
     
+    Entradas:
+    ---------
+    f : función
+        El objetivo que se está optimizando.
+    x : ndarray
+        Punto actual.
+    grad : ndarray
+        Gradiente de f en x.
+    p : ndarray
+        Dirección de descenso.
+    c1 : double
+        Constante de wolfe.
+    max_iner_iter : int
+        Cota para el número de iteraciones o equivalentemente, 
+        cota inferior para alfa de la forma 2^{-max_inner_iter}<=alfa
+        
+    Regresa:
+    --------
+    alpha : double
+        Una buena tasa de aprendizaje.
+    """
+    
+    n_iter = 0
+    alpha = 1
+    
+    while (f(x+alpha*p) > f(x)+alpha*c1*np.dot(grad,p)) and (n_iter < max_inner_iter):
+        alpha /= 2
+        n_iter += 1
+        
+    return alpha
+```
+
+## Encontrar $p$
+
+```python
+def descoor(grad):
+    """ Elige p por la coordenada de mayor descenso.
+    """
+    
+    n=grad.shape[0]
+    k = np.argmax(grad)
+    if grad[k] > 0:
+        return -np.identity(n)[k]
+    else:
+        return np.identity(n)[k]      
+```
+
+```python
+def max_desc(f, x):
+    """ Elige p de máximo descenso.
+    """
+    return -nd.Gradient(f)(x)
+```
+
+```python
+def newton_dir(f,x):
+    """ Elige p la dirección de Newton.
+    """
+    H = nd.Hessian(f)(x)
+    return np.linalg.solve(H,-nd.Gradient(f)(x))
+```
+
+## Pruebas
+
+### Función de Rosenbrok
+
+```python
+for m in ['newton', 'max', 'descoor']:
+    print(f'Ahora trabajando en el método {m}')
+    resp = busqueda_linea(rosen, np.array([2,3]), method=m)
+    n = resp['n_iter']
+    x = resp['x*']
+    print(f"tomó {n} iteraciones llegar a {x}")
+          
+```
+
+### Función cuadrática
+
+```python
+def funcuad(x):
+    A = np.array([[1,1,1,1], [1,2,3,4], [1,3,6,10], [1,4,10,20]])
+    b = -np.ones(4)
+    c = 1
+    
+    return 1/2*np.dot(np.dot(x,A), x)+np.dot(x,b)+c
+```
+
+```python
+for m in ['newton', 'max', 'descoor']:
+    print(f'Ahora trabajando en el método {m}')
+    resp = busqueda_linea(funcuad, np.array([5,5,5,5]), method=m)
+    n = resp['n_iter']
+    x = resp['x*']
+    print(f"tomó {n} iteraciones llegar a {x}")
+    print()
+          
+```
+
+```python
+
 ```
