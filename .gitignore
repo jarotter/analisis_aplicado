@@ -3,6 +3,9 @@
 # Archivos de la materia
 nocedal.pdf
 
+# Uso jupytext
+*.ipynb
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
