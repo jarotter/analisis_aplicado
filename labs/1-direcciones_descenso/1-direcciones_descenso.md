@@ -32,7 +32,7 @@ $$
 ## Método general
 
 ```python
-def busqueda_linea(f, x, tol=1e-5, max_iter=300, method='newton', **kwargs):
+def busqueda_linea(f, x, tol=1e-5, max_iter=300, direction='newton', **kwargs):
     """ Método de descenso por coordenadas para minimizar una función f:R^n --> R de clase C2.
     
     Entradas:
@@ -45,7 +45,7 @@ def busqueda_linea(f, x, tol=1e-5, max_iter=300, method='newton', **kwargs):
         Tolerancia.
     max_iter : int
         Número máximo de iteraciones.
-    method : string
+    direction : string
         Uno de 'newton', 'descoor', o 'max' para elegir la dirección de descenso.
         
     Regresa:
@@ -64,11 +64,11 @@ def busqueda_linea(f, x, tol=1e-5, max_iter=300, method='newton', **kwargs):
     grad = nd.Gradient(f)
     while (np.linalg.norm(grad(x)) > tol) and (n_iter < max_iter):
         
-        if method == 'descoor':
+        if direction == 'descoor':
             p = descoor(grad(x))
-        elif method == 'max':
+        elif direction == 'max':
             p = -grad(x)
-        elif method == 'newton':
+        elif direction == 'newton':
             p = newton_dir(f,x)
         else:
             raise ValueError('Método inválido')
@@ -158,7 +158,7 @@ def newton_dir(f,x):
 ```python
 for m in ['newton', 'max', 'descoor']:
     print(f'Ahora trabajando en el método {m}')
-    resp = busqueda_linea(rosen, np.array([2,3]), method=m)
+    resp = busqueda_linea(rosen, np.array([2,3]), direction=m)
     n = resp['n_iter']
     x = resp['x*']
     print(f"tomó {n} iteraciones llegar a {x}")
@@ -179,7 +179,7 @@ def funcuad(x):
 ```python
 for m in ['newton', 'max', 'descoor']:
     print(f'Ahora trabajando en el método {m}')
-    resp = busqueda_linea(funcuad, np.array([5,5,5,5]), method=m)
+    resp = busqueda_linea(funcuad, np.array([5,5,5,5]), direction=m)
     n = resp['n_iter']
     x = resp['x*']
     print(f"tomó {n} iteraciones llegar a {x}")
