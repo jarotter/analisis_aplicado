@@ -32,7 +32,7 @@ $$
 ## Método general
 
 ```python
-def busqueda_linea(f, x, tol=1e-5, max_iter=300, direction='newton', **kwargs):
+def busqueda_linea(f, x, tol=1e-5, max_iter=300, direction='newton', alpha_method='backtracking', **kwargs):
     """ Método de descenso por coordenadas para minimizar una función f:R^n --> R de clase C2.
     
     Entradas:
@@ -71,9 +71,15 @@ def busqueda_linea(f, x, tol=1e-5, max_iter=300, direction='newton', **kwargs):
         elif direction == 'newton':
             p = newton_dir(f,x)
         else:
+            raise ValueError('Dirección inválida')
+        
+        if alpha_method == 'backtracking':
+            alfa = backtracking(c1, max_alpha_iter, f=f, x=x, grad=grad(x), p=p)
+        elif alpha_method == 'interpol':
+            alfa = interpolacion_cuadratica(f, x, grad(x), p, **kwargs)
+        else:
             raise ValueError('Método inválido')
-            
-        alfa = encontrar_alfa(f,x,grad(x),p,**kwargs)
+        
         x = x + alfa*p
         
         W = np.vstack([W,x])
@@ -86,24 +92,18 @@ def busqueda_linea(f, x, tol=1e-5, max_iter=300, direction='newton', **kwargs):
 ## Encontrar $\alpha$
 
 ```python
-def encontrar_alfa(f, x, grad, p, c1=0.1, max_inner_iter=10):
-    """Encuentra por búsqueda binaria la tasa de aprendizaje en una iteración.
+def backtracking(c1=0.1, max_alpha_iter=20, alpha=1, **kwargs):
+    """Encuentra por backtracking la tasa de aprendizaje en una iteración.
     
     Entradas:
     ---------
-    f : función
-        El objetivo que se está optimizando.
-    x : ndarray
-        Punto actual.
-    grad : ndarray
-        Gradiente de f en x.
-    p : ndarray
-        Dirección de descenso.
     c1 : double
         Constante de wolfe.
     max_iner_iter : int
         Cota para el número de iteraciones o equivalentemente, 
         cota inferior para alfa de la forma 2^{-max_inner_iter}<=alfa
+    alpha : double
+        La estimación inicial.
         
     Regresa:
     --------
@@ -112,7 +112,6 @@ def encontrar_alfa(f, x, grad, p, c1=0.1, max_inner_iter=10):
     """
     
     n_iter = 0
-    alpha = 1
     
     while (f(x+alpha*p) > f(x)+alpha*c1*np.dot(grad,p)) and (n_iter < max_inner_iter):
         alpha /= 2
