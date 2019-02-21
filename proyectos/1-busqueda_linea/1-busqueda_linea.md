@@ -19,6 +19,9 @@ from scipy.linalg import LinAlgError
 import numdifftools as nd
 import numpy as np
 from numba import jit
+import matplotlib.pyplot as plt
+from pprint import pprint
+plt.rcParams['figure.figsize'] = (20,10)
 ```
 
 # Búsqueda de línea
@@ -224,7 +227,7 @@ def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, hybridization='zefe', 
 ## Búsqueda de línea
 
 ```python
-def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-8, max_iter=250, **kwargs):
+def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-5, max_iter=250, **kwargs):
     """ Método de descenso por búsqueda de línea para minimizar una función 
         f:R^n --> R de clase C2.
     
@@ -258,8 +261,9 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-8, max_iter=250, **kwargs):
     
     while (linalg.norm(gx) > tol_g) and (n_iter < max_iter):
       
-        if (n_iter > 0) and (linalg.norm(x-W[n_iter-1,:])/linalg.norm(W[n_iter-1,:]) < tol_p):
-            break
+        if (n_iter > 0):
+            if (linalg.norm(x-W[n_iter-1,:])<linalg.norm(W[n_iter-1,:]) *tol_p) or (linalg.norm(p)<tol_p):
+                break
         
         p = encontrar_direccion_descenso(gx, f=f, x=x, **kwargs)
         
@@ -271,7 +275,7 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-8, max_iter=250, **kwargs):
         W = np.vstack([W,x])
         n_iter +=1
     
-    return ({'x*':x, 'n_iter':n_iter, 'z*':f(x), 'gx':gx})    
+    return ({'x*':x, 'n_iter':n_iter, 'z*':f(x), 'gx':gx}, W)    
 ```
 
 ## Funciones de prueba
@@ -315,52 +319,198 @@ def shubert(x):
     return np.sum(i*np.cos((i+1)*x[0]+i))*np.sum(i*np.cos((i+1)*x[1]+i))
 ```
 
-## Pruebas
+## Pruebas y figuras
 
 ```python
-busqueda_linea(rosen, np.array([2,2]), direction='newton')
+def plot_path(xmin, xmax, ymin, ymax, f, opt, pathn, pathm):
+    x = np.linspace(xmin, xmax, 100)
+    y = np.linspace(ymin, ymax, 100)
+    x, y = np.meshgrid(x, y)
+    z = f(x,y)
+    
+    
+    cs = plt.contour(x, y, z, 30, alpha=0.5)
+    plt.clabel(cs, inline=1, fontsize=10)
+    plt.grid(True)
+    plt.plot(opt[0], opt[1], 'r*', markersize=25)
+    
+    for i in range(pathn.shape[0]-1):
+        x0 = pathn[i,0]
+        y0 = pathn[i,1]
+        dx = pathn[i+1,0] - x0
+        dy = pathn[i+1,1] - y0
+        plt.arrow(x0, y0, dx, dy, color='orange', head_width=0.05)
+    for i in range(pathm.shape[0]-1):
+        x0 = pathm[i,0]
+        y0 = pathm[i,1]
+        dx = pathm[i+1,0] - x0
+        dy = pathm[i+1,1] - y0
+        plt.arrow(x0, y0, dx, dy,head_width=0.05)
 ```
 
-Converge bien en Newton (16 iteraciones) pero no en máximo descenso.
+### Rosenbrock
 
 ```python
-busqueda_linea(rastrigin, np.array([0.4, 0.3]), direction='max')
+resn, pathn = busqueda_linea(rosen, np.array([2,2]), direction='newton')
+resm, pathm = busqueda_linea(rosen, np.array([2,2]), direction='max')
+plot_path(0, 3, -2, 5, lambda x,y: 100*(y-x**2)**2+(x-1)**2, [1,1], pathn, pathm)
+```
+
+Converge bien en Newton (16 iteraciones) pero no en máximo descenso:
+
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
+```
+
+### Rastrigin
+
+```python
+resn, pathn = busqueda_linea(rastrigin, np.array([0.4, 0.3]), direction='newton')
+resm, pathm = busqueda_linea(rastrigin, np.array([0.4, 0.3]), direction='max')
+plot_path(-4, 4, -4, 4, lambda x,y: 20+x**2+y**2-10*np.cos(2*np.pi*x)-10*np.cos(2*np.pi*y), [0,0], pathn, pathm)
+```
+
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
 ```
 
 Se va a mínimos locales en ambos casos, pero igual es mejor el de máximo descenso.
 
+
+### Griewank
+
 ```python
-busqueda_linea(griewank, np.array([2, 0]), direction='newton')
+resn, pathn = busqueda_linea(griewank, np.array([0.4, 0.3]), direction='newton')
+resm, pathm = busqueda_linea(griewank, np.array([0.4, 0.3]), direction='max')
+plot_path(-4, 4, -1, 1, lambda x,y: (x**2+y**2)/4000-np.cos(x)-np.cos(y/np.sqrt(2))+1, [0,0], pathn, pathm)
 ```
 
-Converge rápido en máximo descenso (5 iteraciones) pero no en Newton.
-
 ```python
-busqueda_linea(ackley, np.array([0, 1.5]), direction='max')
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
 ```
 
-Converge en máximo descenso (57 iteraciones) pero no en Newton.
+En newton converge y en máximo converge un poquito más lento.
+
+
+### Ackley
 
 ```python
-busqueda_linea(branin, np.array([-4, 13]), direction='newton')
+resm, pathm = busqueda_linea(ackley, np.array([0, 1.5]), direction='max')
+resn, pathn = busqueda_linea(ackley, np.array([0, 1.5]), direction='newton')
+ack = lambda x,y: -20*np.exp(-0.2/2*(x**2+y**2))-np.exp(1/2*(np.cos(2*np.pi*x))+np.cos(2*np.pi*y))+20+np.exp(1)
+plot_path(-1, 1, -2, 2, ack, [0,0], pathn, pathm)
 ```
 
-Converge en 90 iteraciones con máximo descenso y en 4 con Newton.
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
+```
+
+Converge en máximo descenso (44 iteraciones) pero no en Newton.
+
+
+### Branin
 
 ```python
-busqueda_linea(easom, np.array([5, 5]), direction='newton')
+resn, pathn = busqueda_linea(branin, np.array([-4, 13]), direction='newton')
+resm, pathm = busqueda_linea(branin, np.array([-4, 13]), direction='max')
+bran = lambda x,y: (y-(5.1/(4*np.pi**2))*x**2+(5/np.pi)*x-6)**2 + 10*(1-(1/(8*np.pi)))*np.cos(x)+10
+plot_path(-5, 5, 10, 15, bran, [-np.pi,12.275], pathn, pathm) 
+```
+
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
+```
+
+Converge en 37 iteraciones con máximo descenso y en 4 con Newton.
+
+
+### Easom
+
+```python
+resn, pathn = busqueda_linea(easom, np.array([5, 5]), direction='newton')
+resm, pathm = busqueda_linea(easom, np.array([5, 5]), direction='max')
+eas = lambda x,y: -np.cos(x)*np.cos(y)*np.exp(-(x-np.pi)**2-(y-np.pi)**2)
+plot_path(2, 6, 2, 6, eas, [np.pi,np.pi], pathn, pathm) 
+```
+
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
 ```
 
 En ambos casos se atora y casi no avanza.
 
+
+### Schaffer (2)
+
 ```python
-busqueda_linea(second_schaffer, np.array([1, 1]), direction='newton')
+resn, pathn = busqueda_linea(second_schaffer, np.array([1, 1]), direction='newton')
+resm, pathm = busqueda_linea(second_schaffer, np.array([1, 1]), direction='max')
+sha2 = lambda x,y: 0.5 + (np.sin(x**2-y**2)**2-0.5)/(1+0.001*(x**2+y**2))**2
+plot_path(-2, 2, -2, 2, sha2, [0,0], pathn, pathm) 
+```
+
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
 ```
 
 Newton converge rápido (en 2 iteraciones) y máximo no converge.
 
+
+### Shubert
+
 ```python
-busqueda_linea(shubert, np.array([3, 1]), direction='max')
+resn, pathn = busqueda_linea(shubert, np.array([3, 1]), direction='newton')
+resm, pathm = busqueda_linea(shubert, np.array([3, 1]), direction='max')
+def shub(x,y):
+    resx = resy = 0
+    for i in range(1,6):
+        resx += i*np.cos((i+1)*x+i)
+        resy += i*np.cos((i+1)*y+i)
+    return resx*resy
+plot_path(0, 45, 0, 6, shub, [36.27,5.48], pathn, pathm) 
 ```
 
-Newton se atora en un mínimo local después de tres iteraciones y máximo descenso converge en 56.
+```python
+pprint(resn)
+print()
+print('---------------')
+print()
+pprint(resm)
+```
+
+Newton se atora en un mínimo local después de tres iteraciones y máximo descenso converge en 15.
+
+
+## Figuras
+
+```python
+
+```
