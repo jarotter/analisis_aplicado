@@ -101,8 +101,7 @@ def newton_dir(f, x, gx):
 ## Tamaño del paso: $\alpha$
 
 ```python
-def encontrar_tamano_paso(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, alpha_method='hibrido',
-                              hybridization='zefe', **kwargs):
+def encontrar_tamano_paso(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, alpha_method='hibrido', **kwargs):
     """Aproxima el tamaño óptimo del paso a dar.
     
     Parameters
@@ -119,7 +118,7 @@ def encontrar_tamano_paso(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, alpha_me
     elif alpha_method == 'interpol':
         return interpolacion_cuadratica(f, x, gx, p, c1=c1, alpha_iter=alpha_iter, alpha=1)
     elif alpha_method == 'hibrido':
-        return hibrido(f, x, gx, p, c1=c1, alpha_iter=alpha_iter, alpha=1, hybridization=hybridization)
+        return hibrido(f, x, gx, p, c1=c1, alpha_iter=alpha_iter, alpha=1)
     else:
         raise ValueError('Método inválido')
 ```
@@ -157,28 +156,7 @@ def interpolacion_cuadratica(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1):
 ```
 
 ```python
-def which_alpha(alpha_bt, alpha_inter, hybridization):
-    """Define cómo continuar el método híbrido depara seleccionar el tamaño dep paso.
-    """
-    
-    if hybridization is None or hybridization=='zefe':
-        return (alpha_bt, alpha_inter)
-    elif hybridization == 'max':
-        alpha = max(alpha_bt, alpha_inter)
-    elif hybridization == 'min':
-        alpha = min(alpha_bt, alpha_inter)
-    elif hybridization == 'bt':
-        alpha = alpha_bt
-    elif hybridization == 'inter':
-        alpha = alpha_inter
-    else:
-        raise ValueError('Hibridación inválida')
-    
-    return (alpha, alpha)
-```
-
-```python
-def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, hybridization='zefe', tol_alpha=1e-2):
+def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, tol_alpha=1e-3):
     """ Método híbrido para encontrar el tamaño de paso en búsqueda de línea.
     """
     
@@ -194,33 +172,22 @@ def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, hybridization='zefe', 
     while (bt_flag + inter_flag == 0) and num_iter < alpha_iter:
         alpha_bt = alpha_bt/2
         bt_flag = w1(f, x, gx, p, alpha_bt, c1)
-        #print(alpha_bt)
         
         alpha_inter = interpolacion_cuadratica(f, x, gx, p, c1=c1, alpha_iter=1, alpha=alpha_bt)
         inter_flag = w1(f, x, gx, p, alpha_inter, c1)
-        #print(alpha_inter)
-        
-        #alpha_bt, alpha_inter = which_alpha(alpha_bt, alpha_inter, hybridization)
         num_iter += 1
-        
-    #print(alpha_bt, alpha_inter, num_iter)
 
     if num_iter == alpha_iter:
-        #print('iters')
-        return tol_alpha
+        return 1e-2
     elif linalg.norm(alpha*p) < tol_alpha:
-        #print('size')
-        return tol_alpha
+        return 1e-2
     elif inter_flag:
         if bt_flag:
-            #print('both')
             alpha = max(alpha_inter, alpha_bt)
             return alpha
         else:
-            #print('inter')
             return alpha_inter
     elif bt_flag:
-        #print('bt')
         return alpha_bt
 ```
 
@@ -356,8 +323,6 @@ resm, pathm = busqueda_linea(rosen, np.array([2,2]), direction='max')
 plot_path(0, 3, -2, 5, lambda x,y: 100*(y-x**2)**2+(x-1)**2, [1,1], pathn, pathm)
 ```
 
-Converge bien en Newton (16 iteraciones) pero no en máximo descenso:
-
 ```python
 pprint(resn)
 print()
@@ -365,6 +330,9 @@ print('---------------')
 print()
 pprint(resm)
 ```
+
+Converge bien en Newton (16 iteraciones) pero no en máximo descenso:
+
 
 ### Rastrigin
 
@@ -509,8 +477,62 @@ pprint(resm)
 Newton se atora en un mínimo local después de tres iteraciones y máximo descenso converge en 15.
 
 
-## Figuras
+## Compación con los métodos no-híbridos que vimos
 
 ```python
+def comparar(f, x, direction):
+    x = np.array(x)
+    for m in ['hibrido', 'backtracking', 'interpol']:
+        resn, _ = busqueda_linea(f, x, direction=direction, alpha_method=m)
+        print(f"Método {m}")
+        print(f"    {resn['n_iter']} iteraciones")
+        print(f"    La norma del gradiente es {linalg.norm(resn['gx'])}")
+```
 
+### Rosenbrock
+
+```python
+comparar(rosen, [2,2], 'newton')
+```
+
+### Rastrigin
+
+```python
+comparar(rastrigin, [0.4, 0.3], 'max')
+```
+
+### Griewank
+
+```python
+comparar(griewank, [2,0], 'newton')
+```
+
+### Ackley
+
+```python
+comparar(ackley, [0, 1.5], 'newton')
+```
+
+### Branin
+
+```python
+comparar(branin, [-4, 13], 'newton')
+```
+
+### Easom
+
+```python
+comparar(easom, [5,5], 'max')
+```
+
+### Segunda función de Schaffer
+
+```python
+comparar(second_schaffer, [1,1], 'newton')
+```
+
+### Shubert
+
+```python
+comparar(shubert, [3,1], 'max')
 ```
