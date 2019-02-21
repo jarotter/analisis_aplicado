@@ -12,6 +12,19 @@ jupyter:
     name: python3
 ---
 
+# Búsqueda de línea híbrida 
+
+
+## Condiciones de terminación
+
+
+\begin{equation}
+\| \nabla f(x_k)\|_2 < 10^{-8} \\
+\| p_k \|_2 < 10^{-4}\\
+\| x_{k-1}-x_k\|_2 < 10^{-5} \|x_{k-1}\|_2 \\
+n_{iter}> 249
+\end{equation}
+
 ```python
 from scipy import linalg
 from scipy.optimize import rosen
@@ -21,6 +34,10 @@ import numpy as np
 from numba import jit
 import matplotlib.pyplot as plt
 from pprint import pprint
+plt.rcParams['figure.figsize'] = (20,10)
+```
+
+```python
 plt.rcParams['figure.figsize'] = (20,10)
 ```
 
@@ -134,7 +151,7 @@ def backtracking(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1):
         alpha /= 2
         n_iter += 1
         
-    return alpha
+    return alpha, n_iter+1
 ```
 
 ```python
@@ -152,7 +169,7 @@ def interpolacion_cuadratica(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1):
         gal = g(alpha)
         num_iter += 1
         
-    return alpha
+    return alpha, num_iter+1
 ```
 
 ```python
@@ -167,28 +184,28 @@ def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, tol_alpha=1e-3):
     num_iter = 0
     
     if w1(f, x, gx, p, alpha, c1):
-        return alpha
+        return alpha, 1
     
     while (bt_flag + inter_flag == 0) and num_iter < alpha_iter:
         alpha_bt = alpha_bt/2
         bt_flag = w1(f, x, gx, p, alpha_bt, c1)
         
-        alpha_inter = interpolacion_cuadratica(f, x, gx, p, c1=c1, alpha_iter=1, alpha=alpha_bt)
+        alpha_inter, jter = interpolacion_cuadratica(f, x, gx, p, c1=c1, alpha_iter=1, alpha=alpha_bt)
         inter_flag = w1(f, x, gx, p, alpha_inter, c1)
-        num_iter += 1
+        num_iter += jter
 
     if num_iter == alpha_iter:
-        return 1e-2
+        return 1e-2, num_iter
     elif linalg.norm(alpha*p) < tol_alpha:
-        return 1e-2
+        return 1e-2, num_iter
     elif inter_flag:
         if bt_flag:
             alpha = max(alpha_inter, alpha_bt)
-            return alpha
+            return alpha, num_iter
         else:
-            return alpha_inter
+            return alpha_inter, num_iter
     elif bt_flag:
-        return alpha_bt
+        return alpha_bt, num_iter
 ```
 
 ## Búsqueda de línea
@@ -222,6 +239,7 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-5, max_iter=250, **kwargs):
     W = np.copy(x0)
     x = np.copy(x0)
     n_iter = 0
+    inner_iter = 0
     
     grad = nd.Gradient(f)
     gx = grad(x)
@@ -234,7 +252,9 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-5, max_iter=250, **kwargs):
         
         p = encontrar_direccion_descenso(gx, f=f, x=x, **kwargs)
         
-        alpha = encontrar_tamano_paso(f, x, gx, p, **kwargs)
+        alpha, jter = encontrar_tamano_paso(f, x, gx, p, **kwargs)
+
+        inner_iter += jter
               
         x = x + alpha*p
         gx = grad(x)
@@ -242,7 +262,8 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-5, max_iter=250, **kwargs):
         W = np.vstack([W,x])
         n_iter +=1
     
-    return ({'x*':x, 'n_iter':n_iter, 'z*':f(x), 'gx':gx}, W)    
+    is_defpos = np.all(np.linalg.eigvals(nd.Hessian(f)(x))> - .0001)
+    return ({'x*':x, 'n_iter':n_iter, 'z*':f(x), 'gx':gx, 'inner_iter':inner_iter, 'dp':is_defpos}, W)    
 ```
 
 ## Funciones de prueba
@@ -286,7 +307,7 @@ def shubert(x):
     return np.sum(i*np.cos((i+1)*x[0]+i))*np.sum(i*np.cos((i+1)*x[1]+i))
 ```
 
-## Pruebas y figuras
+## Pruebas 
 
 ```python
 def plot_path(xmin, xmax, ymin, ymax, f, opt, pathn, pathm):
@@ -315,6 +336,20 @@ def plot_path(xmin, xmax, ymin, ymax, f, opt, pathn, pathm):
         plt.arrow(x0, y0, dx, dy,head_width=0.05)
 ```
 
+```python
+def comparar(f, x, direction, minimo):
+    x = np.array(x)
+    for m in ['hibrido', 'backtracking', 'interpol']:
+        res, _ = busqueda_linea(f, x, direction=direction, alpha_method=m)
+        print(f"Método {m}")
+        print(f"    {res['n_iter']} iteraciones (puntos pisados)")
+        print(f"    {res['inner_iter']} iteraciones totales para encontrar alpha")
+        print(f"    Error absoluto: {np.abs(res['z*']-minimo)}")
+        print(f"    Norma del gradiente: {linalg.norm(res['gx'])}")
+        print(f"    ¿Hessiana definida positiva?: {res['dp']}")
+        print()
+```
+
 ### Rosenbrock
 
 ```python
@@ -323,16 +358,15 @@ resm, pathm = busqueda_linea(rosen, np.array([2,2]), direction='max')
 plot_path(0, 3, -2, 5, lambda x,y: 100*(y-x**2)**2+(x-1)**2, [1,1], pathn, pathm)
 ```
 
-```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
-```
-
 Converge bien en Newton (16 iteraciones) pero no en máximo descenso:
 
+```python
+comparar(rosen, [2,2], 'newton', 0)
+```
+
+```python
+comparar(rosen, [2,2], 'max', 0)
+```
 
 ### Rastrigin
 
@@ -342,16 +376,15 @@ resm, pathm = busqueda_linea(rastrigin, np.array([0.4, 0.3]), direction='max')
 plot_path(-4, 4, -4, 4, lambda x,y: 20+x**2+y**2-10*np.cos(2*np.pi*x)-10*np.cos(2*np.pi*y), [0,0], pathn, pathm)
 ```
 
-```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
-```
-
 Se va a mínimos locales en ambos casos, pero igual es mejor el de máximo descenso.
 
+```python
+comparar(rastrigin, [0.4, 0.3], 'max', 0)
+```
+
+```python
+comparar(rastrigin, [0.4, 0.3], 'newton', 0)
+```
 
 ### Griewank
 
@@ -361,16 +394,15 @@ resm, pathm = busqueda_linea(griewank, np.array([0.4, 0.3]), direction='max')
 plot_path(-4, 4, -1, 1, lambda x,y: (x**2+y**2)/4000-np.cos(x)-np.cos(y/np.sqrt(2))+1, [0,0], pathn, pathm)
 ```
 
+No converge al mínimo global.
+
 ```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
+comparar(griewank, [2,0], 'newton', 0)
 ```
 
-En newton converge y en máximo converge un poquito más lento.
-
+```python
+comparar(griewank, [2,0], 'max', 0)
+```
 
 ### Ackley
 
@@ -381,16 +413,15 @@ ack = lambda x,y: -20*np.exp(-0.2/2*(x**2+y**2))-np.exp(1/2*(np.cos(2*np.pi*x))+
 plot_path(-1, 1, -2, 2, ack, [0,0], pathn, pathm)
 ```
 
+Converge en máximo descenso pero no en Newton.
+
 ```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
+comparar(ackley, [0, 1.5], 'max', 0)
 ```
 
-Converge en máximo descenso (44 iteraciones) pero no en Newton.
-
+```python
+comparar(ackley, [0, 1.5], 'newton', 0)
+```
 
 ### Branin
 
@@ -401,16 +432,15 @@ bran = lambda x,y: (y-(5.1/(4*np.pi**2))*x**2+(5/np.pi)*x-6)**2 + 10*(1-(1/(8*np
 plot_path(-5, 5, 10, 15, bran, [-np.pi,12.275], pathn, pathm) 
 ```
 
+Converge  al mínimo global en 62 iteraciones con máximo descenso y en 4 con Newton.
+
 ```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
+comparar(branin, [-4, 13], 'newton', 0.39789)
 ```
 
-Converge en 37 iteraciones con máximo descenso y en 4 con Newton.
-
+```python
+comparar(branin, [-4, 13], 'max', 0.39789)
+```
 
 ### Easom
 
@@ -421,18 +451,17 @@ eas = lambda x,y: -np.cos(x)*np.cos(y)*np.exp(-(x-np.pi)**2-(y-np.pi)**2)
 plot_path(2, 6, 2, 6, eas, [np.pi,np.pi], pathn, pathm) 
 ```
 
-```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
-```
-
 En ambos casos se atora y casi no avanza.
 
+```python
+comparar(easom, [5,5], 'max', -1)
+```
 
-### Schaffer (2)
+```python
+comparar(easom, [5,5], 'newton', -1)
+```
+
+### Segunda función de schaffer (2)
 
 ```python
 resn, pathn = busqueda_linea(second_schaffer, np.array([1, 1]), direction='newton')
@@ -441,16 +470,15 @@ sha2 = lambda x,y: 0.5 + (np.sin(x**2-y**2)**2-0.5)/(1+0.001*(x**2+y**2))**2
 plot_path(-2, 2, -2, 2, sha2, [0,0], pathn, pathm) 
 ```
 
-```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
-```
-
 Newton converge rápido (en 2 iteraciones) y máximo no converge.
 
+```python
+comparar(second_schaffer, [1,1], 'newton', 0)
+```
+
+```python
+comparar(second_schaffer, [1,1], 'max', 0)
+```
 
 ### Shubert
 
@@ -466,73 +494,12 @@ def shub(x,y):
 plot_path(0, 45, 0, 6, shub, [36.27,5.48], pathn, pathm) 
 ```
 
+En máximo descenso converge al mínimo global, en Newton a un local.
+
 ```python
-pprint(resn)
-print()
-print('---------------')
-print()
-pprint(resm)
+comparar(shubert, [1,2], 'max', -186.7309)
 ```
 
-Newton se atora en un mínimo local después de tres iteraciones y máximo descenso converge en 15.
-
-
-## Compación con los métodos no-híbridos que vimos
-
 ```python
-def comparar(f, x, direction):
-    x = np.array(x)
-    for m in ['hibrido', 'backtracking', 'interpol']:
-        resn, _ = busqueda_linea(f, x, direction=direction, alpha_method=m)
-        print(f"Método {m}")
-        print(f"    {resn['n_iter']} iteraciones")
-        print(f"    La norma del gradiente es {linalg.norm(resn['gx'])}")
-```
-
-### Rosenbrock
-
-```python
-comparar(rosen, [2,2], 'newton')
-```
-
-### Rastrigin
-
-```python
-comparar(rastrigin, [0.4, 0.3], 'max')
-```
-
-### Griewank
-
-```python
-comparar(griewank, [2,0], 'newton')
-```
-
-### Ackley
-
-```python
-comparar(ackley, [0, 1.5], 'newton')
-```
-
-### Branin
-
-```python
-comparar(branin, [-4, 13], 'newton')
-```
-
-### Easom
-
-```python
-comparar(easom, [5,5], 'max')
-```
-
-### Segunda función de Schaffer
-
-```python
-comparar(second_schaffer, [1,1], 'newton')
-```
-
-### Shubert
-
-```python
-comparar(shubert, [3,1], 'max')
+comparar(shubert, [1,2], 'newton', -186.7309)
 ```
