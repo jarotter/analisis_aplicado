@@ -99,7 +99,7 @@ def newton_dir(f, x, gx):
 
 ```python
 def encontrar_tamano_paso(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, alpha_method='hibrido',
-                              hybridization=None, **kwargs):
+                              hybridization='zefe', **kwargs):
     """Aproxima el tamaño óptimo del paso a dar.
     
     Parameters
@@ -158,7 +158,7 @@ def which_alpha(alpha_bt, alpha_inter, hybridization):
     """Define cómo continuar el método híbrido depara seleccionar el tamaño dep paso.
     """
     
-    if hybridization is None:
+    if hybridization is None or hybridization=='zefe':
         return (alpha_bt, alpha_inter)
     elif hybridization == 'max':
         alpha = max(alpha_bt, alpha_inter)
@@ -175,7 +175,7 @@ def which_alpha(alpha_bt, alpha_inter, hybridization):
 ```
 
 ```python
-def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, hybridization=None, tol_alpha=10e-2):
+def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, hybridization='zefe', tol_alpha=1e-2):
     """ Método híbrido para encontrar el tamaño de paso en búsqueda de línea.
     """
     
@@ -191,32 +191,40 @@ def hibrido(f, x, gx, p, c1=1e-4, alpha_iter=20, alpha=1, hybridization=None, to
     while (bt_flag + inter_flag == 0) and num_iter < alpha_iter:
         alpha_bt = alpha_bt/2
         bt_flag = w1(f, x, gx, p, alpha_bt, c1)
+        #print(alpha_bt)
         
-        alpha_inter = interpolacion_cuadratica(f, x, gx, p, c1=c1, alpha_iter=1, alpha=alpha_inter)
+        alpha_inter = interpolacion_cuadratica(f, x, gx, p, c1=c1, alpha_iter=1, alpha=alpha_bt)
         inter_flag = w1(f, x, gx, p, alpha_inter, c1)
+        #print(alpha_inter)
         
-        alpha_bt, alpha_inter = which_alpha(alpha_bt, alpha_inter, hybridization)
+        #alpha_bt, alpha_inter = which_alpha(alpha_bt, alpha_inter, hybridization)
         num_iter += 1
+        
+    #print(alpha_bt, alpha_inter, num_iter)
 
-    if num_iter > alpha_iter:
+    if num_iter == alpha_iter:
+        #print('iters')
+        return tol_alpha
+    elif linalg.norm(alpha*p) < tol_alpha:
+        #print('size')
         return tol_alpha
     elif inter_flag:
         if bt_flag:
-            alpha = max(bt_flag, inter_flag)
-            if linalg.norm(alpha*p) <= tol_alpha:
-                return alpha
-            else:
-                return tol_alpha
+            #print('both')
+            alpha = max(alpha_inter, alpha_bt)
+            return alpha
         else:
+            #print('inter')
             return alpha_inter
-    else:
+    elif bt_flag:
+        #print('bt')
         return alpha_bt
 ```
 
 ## Búsqueda de línea
 
 ```python
-def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-4, max_iter=250, **kwargs):
+def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-8, max_iter=250, **kwargs):
     """ Método de descenso por búsqueda de línea para minimizar una función 
         f:R^n --> R de clase C2.
     
@@ -241,7 +249,6 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-4, max_iter=250, **kwargs):
         Valores que tomó x durante la optimización.
     """
     
-    n = x0.shape[0]
     W = np.copy(x0)
     x = np.copy(x0)
     n_iter = 0
@@ -250,11 +257,11 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-4, max_iter=250, **kwargs):
     gx = grad(x)
     
     while (linalg.norm(gx) > tol_g) and (n_iter < max_iter):
+      
+        if (n_iter > 0) and (linalg.norm(x-W[n_iter-1,:])/linalg.norm(W[n_iter-1,:]) < tol_p):
+            break
         
         p = encontrar_direccion_descenso(gx, f=f, x=x, **kwargs)
-        
-        if linalg.norm(p) < tol_p:
-            break
         
         alpha = encontrar_tamano_paso(f, x, gx, p, **kwargs)
               
@@ -263,54 +270,46 @@ def busqueda_linea(f, x0, tol_g=1e-8, tol_p=1e-4, max_iter=250, **kwargs):
         
         W = np.vstack([W,x])
         n_iter +=1
-        
-    return ({'x*':x, 'n_iter':n_iter, 'z*':f(x), 'gx':gx})
     
+    return ({'x*':x, 'n_iter':n_iter, 'z*':f(x), 'gx':gx})    
 ```
 
 ## Funciones de prueba
 
 ```python
-@jit(nopython=True)
 def rastrigin(x):
     n = x.shape[0]
     return 10*n + np.sum(x**2-10*np.cos(2*np.pi*x))
 ```
 
 ```python
-@jit(nopython=True)
 def griewank(x):
     n = x.shape[0]
     return 1/4000*np.sum(x**2) - np.prod(np.cos(x/np.sqrt(np.arange(n)+1)))+1
 ```
 
 ```python
-@jit(nopython=True)
 def ackley(x, a=20, b=0.2, c=2*np.pi):
     n = x.shape[0]
     return -a*np.exp(-b*np.sqrt(1/n*np.sum(x**2))) -np.exp(1/n*np.sum(np.cos(c*x)))+a+np.exp(1)
 ```
 
 ```python
-@jit(nopython=True)
 def branin(x, a=1, b=5.1/(4*np.pi**2), c=5/np.pi, r=6, s=10, t=1/(8*np.pi)):
-    return -a*(x[1]-b*x[0]**2+c*x[0]-r)**2 + s*(1-t)*np.cos(x[0])+s  
+    return a*(x[1]-b*x[0]**2+c*x[0]-r)**2 + s*(1-t)*np.cos(x[0])+s  
 ```
 
 ```python
-@jit(nopython=True)
 def easom(x):
     return -np.cos(x[0])*np.cos(x[1])*np.exp(-(x[0]-np.pi)**2-(x[1]-np.pi)**2)
 ```
 
 ```python
-@jit(nopython=True)
 def second_schaffer(x):
     return 0.5 + (np.sin(x[0]**2-x[1]**2)**2-0.5)/((1+0.001*np.sum(x**2))**2)
 ```
 
 ```python
-@jit(nopython=True)
 def shubert(x):
     i = np.arange(5)+1
     return np.sum(i*np.cos((i+1)*x[0]+i))*np.sum(i*np.cos((i+1)*x[1]+i))
@@ -322,30 +321,46 @@ def shubert(x):
 busqueda_linea(rosen, np.array([2,2]), direction='newton')
 ```
 
+Converge bien en Newton (16 iteraciones) pero no en máximo descenso.
+
 ```python
 busqueda_linea(rastrigin, np.array([0.4, 0.3]), direction='max')
 ```
+
+Se va a mínimos locales en ambos casos, pero igual es mejor el de máximo descenso.
 
 ```python
 busqueda_linea(griewank, np.array([2, 0]), direction='newton')
 ```
 
+Converge rápido en máximo descenso (5 iteraciones) pero no en Newton.
+
 ```python
 busqueda_linea(ackley, np.array([0, 1.5]), direction='max')
 ```
+
+Converge en máximo descenso (57 iteraciones) pero no en Newton.
 
 ```python
 busqueda_linea(branin, np.array([-4, 13]), direction='newton')
 ```
 
+Converge en 90 iteraciones con máximo descenso y en 4 con Newton.
+
 ```python
-busqueda_linea(easom, np.array([5, 5]), direction='max')
+busqueda_linea(easom, np.array([5, 5]), direction='newton')
 ```
+
+En ambos casos se atora y casi no avanza.
 
 ```python
 busqueda_linea(second_schaffer, np.array([1, 1]), direction='newton')
 ```
 
+Newton converge rápido (en 2 iteraciones) y máximo no converge.
+
 ```python
-busqueda_linea(shubert, np.array([3, 1]), direction='newton')
+busqueda_linea(shubert, np.array([3, 1]), direction='max')
 ```
+
+Newton se atora en un mínimo local después de tres iteraciones y máximo descenso converge en 56.
